@@ -1,6 +1,12 @@
 package dev.xfj.compute.shader.renderer;
 
+import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL46;
+import org.lwjgl.stb.STBImage;
+
+import java.nio.ByteBuffer;
+import java.nio.IntBuffer;
+import java.nio.file.Path;
 
 public class Renderer {
     public static Texture createTexture(int width, int height) {
@@ -16,6 +22,63 @@ public class Renderer {
 
         GL46.glTextureParameteri(result.getHandle(), GL46.GL_TEXTURE_WRAP_S, GL46.GL_CLAMP_TO_EDGE);
         GL46.glTextureParameteri(result.getHandle(), GL46.GL_TEXTURE_WRAP_T, GL46.GL_CLAMP_TO_EDGE);
+
+        return result;
+    }
+
+    public static Texture loadTexture(Path path) {
+        IntBuffer width = BufferUtils.createIntBuffer(1);
+        IntBuffer height = BufferUtils.createIntBuffer(1);
+        IntBuffer channels = BufferUtils.createIntBuffer(1);
+        String filePath = path.normalize().toString();
+        ByteBuffer data = STBImage.stbi_load(filePath, width, height, channels, 0);
+        Texture result = new Texture();
+
+        if (data == null) {
+            System.err.println("Failed to load texture: " + filePath);
+            return result;
+        }
+
+        if (data.hasRemaining()) {
+            int format = switch (channels.get(0)) {
+                case 4 -> GL46.GL_RGBA;
+                case 3 -> GL46.GL_RGB;
+                default -> 0;
+            };
+
+            result.setWidth(width.get(0));
+            result.setHeight(height.get(0));
+
+            result.setHandle(GL46.glCreateTextures(GL46.GL_TEXTURE_2D));
+            GL46.glTextureStorage2D(
+                    result.getHandle(),
+                    1,
+                    format == GL46.GL_RGBA ? GL46.GL_RGBA8 : GL46.GL_RGB8,
+                    width.get(0),
+                    height.get(0)
+            );
+
+            GL46.glTextureSubImage2D(
+                    result.getHandle(),
+                    0,
+                    0,
+                    0, width.get(0),
+                    height.get(0),
+                    format,
+                    GL46.GL_UNSIGNED_BYTE,
+                    data
+            );
+
+            GL46.glTextureParameteri(result.getHandle(), GL46.GL_TEXTURE_MIN_FILTER, GL46.GL_LINEAR);
+            GL46.glTextureParameteri(result.getHandle(), GL46.GL_TEXTURE_MAG_FILTER, GL46.GL_LINEAR);
+
+            GL46.glTextureParameteri(result.getHandle(), GL46.GL_TEXTURE_WRAP_S, GL46.GL_REPEAT);
+            GL46.glTextureParameteri(result.getHandle(), GL46.GL_TEXTURE_WRAP_T, GL46.GL_REPEAT);
+
+            GL46.glGenerateTextureMipmap(result.getHandle());
+
+            STBImage.stbi_image_free(data);
+        }
 
         return result;
     }
