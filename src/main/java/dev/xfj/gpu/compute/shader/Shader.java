@@ -1,4 +1,4 @@
-package dev.xfj.compute.shader.shader;
+package dev.xfj.gpu.compute.shader;
 
 import org.lwjgl.opengl.GL46;
 

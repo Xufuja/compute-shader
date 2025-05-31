@@ -1,4 +1,4 @@
-package dev.xfj.compute.shader.renderer;
+package dev.xfj.gpu.compute.renderer;
 
 public class Framebuffer {
     private int handle;

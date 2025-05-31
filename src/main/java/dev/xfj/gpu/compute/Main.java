@@ -1,9 +1,9 @@
-package dev.xfj.compute.shader;
+package dev.xfj.gpu.compute;
 
-import dev.xfj.compute.shader.renderer.Framebuffer;
-import dev.xfj.compute.shader.renderer.Renderer;
-import dev.xfj.compute.shader.renderer.Texture;
-import dev.xfj.compute.shader.shader.Shader;
+import dev.xfj.gpu.compute.renderer.Framebuffer;
+import dev.xfj.gpu.compute.renderer.Renderer;
+import dev.xfj.gpu.compute.renderer.Texture;
+import dev.xfj.gpu.compute.shader.Shader;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.glfw.GLFWErrorCallback;
 import org.lwjgl.glfw.GLFWKeyCallback;
@@ -12,6 +12,8 @@ import org.lwjgl.opengl.GL46;
 
 import java.nio.file.Path;
 
+import static org.joml.Math.cos;
+import static org.joml.Math.sin;
 import static org.lwjgl.glfw.GLFW.*;
 import static org.lwjgl.system.MemoryUtil.NULL;
 
@@ -75,7 +77,37 @@ public class Main {
         Texture computeShaderTexture = Renderer.createTexture(width[0], height[0]);
         Framebuffer framebuffer = Renderer.createFramebufferWithTexture(computeShaderTexture);
 
+        Texture sky = Renderer.loadTexture(Path.of("assets", "sky.png"));
+        Texture ground = Renderer.loadTexture(Path.of("assets", "snes_smk_mc_2.png"));
+
+        float fWorldX = 1000.4f;
+        float fWorldY = 1000.39f;
+        float fWorldA = 0.77135f;
+        float fNear = 0.026492f;
+        float fFar = 0.199961f;
+        float fFovHalf = 3.14159f / 4.0f;
+
+        float lastTime = (float) glfwGetTime();
+
+        int fps = 0;
+        float secondsTimer = 0.0f;
+
         while (!glfwWindowShouldClose(window)) {
+            float currentTime = (float) glfwGetTime();
+            float deltaTime = currentTime - lastTime;
+            lastTime = currentTime;
+
+            secondsTimer += deltaTime;
+
+            if (secondsTimer >= 1.0f) {
+                String title = String.format("Compute - %s fps", fps);
+
+                glfwSetWindowTitle(window, title);
+
+                secondsTimer = 0.0f;
+                fps = 0;
+            }
+
             glfwGetFramebufferSize(window, width, height);
 
             if (width[0] != computeShaderTexture.getWidth() || height[0] != computeShaderTexture.getHeight()) {
@@ -83,6 +115,24 @@ public class Main {
                 computeShaderTexture = Renderer.createTexture(width[0], height[0]);
                 Renderer.attachTextureToFramebuffer(framebuffer, computeShaderTexture);
             }
+
+            float fFarX1 = fWorldX + cos(fWorldA - fFovHalf) * fFar;
+            float fFarY1 = fWorldY + sin(fWorldA - fFovHalf) * fFar;
+
+            float fNearX1 = fWorldX + cos(fWorldA - fFovHalf) * fNear;
+            float fNearY1 = fWorldY + sin(fWorldA - fFovHalf) * fNear;
+
+            float fFarX2 = fWorldX + cos(fWorldA + fFovHalf) * fFar;
+            float fFarY2 = fWorldY + sin(fWorldA + fFovHalf) * fFar;
+
+            float fNearX2 = fWorldX + cos(fWorldA + fFovHalf) * fNear;
+            float fNearY2 = fWorldY + sin(fWorldA + fFovHalf) * fNear;
+
+            fWorldX += cos(fWorldA) * 0.2f * deltaTime;
+            fWorldY += sin(fWorldA) * 0.2f * deltaTime;
+
+            float[] near = {fNearX1, fNearY1, fNearX2, fNearY2};
+            float[] far = {fFarX1, fFarY1, fFarX2, fFarY2};
 
             GL46.glUseProgram(computeShader);
             GL46.glBindImageTexture(
@@ -94,6 +144,12 @@ public class Main {
                     GL46.GL_WRITE_ONLY,
                     GL46.GL_RGBA32F
             );
+
+            GL46.glBindTextureUnit(1, sky.getHandle());
+            GL46.glBindTextureUnit(2, ground.getHandle());
+
+            GL46.glUniform4fv(0, near);
+            GL46.glUniform4fv(1, far);
 
             int workGroupSizeX = 16;
             int workGroupSizeY = 16;
@@ -108,6 +164,8 @@ public class Main {
 
             glfwSwapBuffers(window);
             glfwPollEvents();
+
+            fps++;
         }
 
         glfwDestroyWindow(window);
