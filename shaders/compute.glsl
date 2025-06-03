@@ -20,9 +20,7 @@ void main()
     vec2 fTexSize = vec2(texSize);
     vec2 normalizedCoord = vec2(pixelCoord) / vec2(texSize);
 
-    normalizedCoord.y = 1.0 / normalizedCoord.y;
-
-    float fSampleDepth = float(pixelCoord.y) / (fTexSize.y / 2.0f);
+    float fSampleDepth = abs(normalizedCoord.y * 2.0 - 1.0);
     float fStartX;
     float fStartY;
     float fEndX;
@@ -50,15 +48,16 @@ void main()
     fSampleX -= int(fSampleX);
     fSampleY -= int(fSampleY);
 
-    vec4 skySample = texture(u_SkyTexture, vec2(fSampleX, fSampleY));
-    vec4 groundSample = texture(u_GroundTexture, vec2(fSampleX, fSampleY));
-
-    skySample.rgb = mix(vec3(1.0), skySample.rgb, fSampleDepth * fSampleDepth);
-    groundSample.rgb = mix(vec3(1.0), groundSample.rgb, fSampleDepth * fSampleDepth);
-
-    ivec2 groundCoord = ivec2(pixelCoord.x, texSize.y / 2 - pixelCoord.y);
-    imageStore(outputImage, groundCoord, groundSample);
-
-    ivec2 skyCoord = ivec2(pixelCoord.x, texSize.y / 2 + pixelCoord.y);
-    imageStore(outputImage, skyCoord, skySample);
+    if (normalizedCoord.y > 0.5)
+    {
+    	vec4 skySample = texture(u_SkyTexture, vec2(fSampleX, fSampleY));
+    	skySample.rgb = mix(vec3(1.0), skySample.rgb, fSampleDepth * fSampleDepth);
+    	imageStore(outputImage, pixelCoord, skySample);
+    }
+    else
+    {
+    	vec4 groundSample = texture(u_GroundTexture, vec2(fSampleX, fSampleY));
+    	groundSample.rgb = mix(vec3(1.0), groundSample.rgb, fSampleDepth * fSampleDepth);
+    	imageStore(outputImage, pixelCoord, groundSample);
+    }
 }

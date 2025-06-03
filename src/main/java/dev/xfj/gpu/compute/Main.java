@@ -18,8 +18,12 @@ import static org.lwjgl.glfw.GLFW.*;
 import static org.lwjgl.system.MemoryUtil.NULL;
 
 public class Main {
+    private static boolean compute = false;
     private static int computeShader = -1;
+    private static int graphicsShader = -1;
     private static Path computeShaderPath = Path.of("shaders/compute.glsl");
+    private static Path vertexShaderPath = Path.of("shaders/vertex.glsl");
+    private static Path fragmentShaderPath = Path.of("shaders/fragment.glsl");
 
     public static void main(String[] args) {
         glfwSetErrorCallback(new GLFWErrorCallback() {
@@ -58,6 +62,11 @@ public class Main {
                     case GLFW_RELEASE -> {
                         if (key == GLFW_KEY_R) {
                             computeShader = Shader.reloadComputeShader(computeShader, computeShaderPath);
+                            graphicsShader = Shader.reloadGraphicsShader(graphicsShader, vertexShaderPath, fragmentShaderPath);
+                        }
+
+                        if (key == GLFW_KEY_S) {
+                            compute = !compute;
                         }
                     }
                 }
@@ -71,7 +80,13 @@ public class Main {
         computeShader = Shader.createComputeShader(computeShaderPath);
 
         if (computeShader == -1) {
-            throw new RuntimeException("Could not initialize shader!");
+            throw new RuntimeException("Compute shader failed!");
+        }
+
+        graphicsShader = Shader.createGraphicsShaders(vertexShaderPath, fragmentShaderPath);
+
+        if (graphicsShader == -1) {
+            throw new RuntimeException("Graphics shader failed!");
         }
 
         Texture computeShaderTexture = Renderer.createTexture(width[0], height[0]);
@@ -79,6 +94,48 @@ public class Main {
 
         Texture sky = Renderer.loadTexture(Path.of("assets", "sky.png"));
         Texture ground = Renderer.loadTexture(Path.of("assets", "snes_smk_mc_2.png"));
+
+        int vertexArray = GL46.glCreateVertexArrays();
+        int vertexBuffer = GL46.glCreateBuffers();
+
+        boolean triangle = true;
+
+        if (!triangle) {
+            int indexBuffer = GL46.glCreateBuffers();
+
+            float[] vertices = {
+                    -1.0f, -1.0f, 0.0f, 0.0f,
+                    1.0f, -1.0f, 1.0f, 0.0f,
+                    -1.0f, 1.0f, 0.0f, 1.0f,
+                    1.0f, 1.0f, 1.0f, 1.0f,
+            };
+
+            int[] indices = {0, 1, 2, 3};
+
+            GL46.glNamedBufferData(vertexBuffer, vertices, GL46.GL_STATIC_DRAW);
+            GL46.glNamedBufferData(indexBuffer, indices, GL46.GL_STATIC_DRAW);
+
+            GL46.glVertexArrayElementBuffer(vertexArray, indexBuffer);
+        } else {
+            float[] vertices = {
+                    -1.0f, -1.0f, 0.0f, 0.0f,
+                    3.0f, -1.0f, 2.0f, 0.0f,
+                    -1.0f, 3.0f, 0.0f, 2.0f
+            };
+
+            GL46.glNamedBufferData(vertexBuffer, vertices, GL46.GL_STATIC_DRAW);
+        }
+
+        GL46.glVertexArrayVertexBuffer(vertexArray, 0, vertexBuffer, 0, Float.BYTES * 4);
+
+        GL46.glEnableVertexArrayAttrib(vertexArray, 0);
+        GL46.glEnableVertexArrayAttrib(vertexArray, 1);
+
+        GL46.glVertexArrayAttribFormat(vertexArray, 0, 2, GL46.GL_FLOAT, false, 0);
+        GL46.glVertexArrayAttribFormat(vertexArray, 1, 2, GL46.GL_FLOAT, false, Float.BYTES * 2);
+
+        GL46.glVertexArrayAttribBinding(vertexArray, 0, 0);
+        GL46.glVertexArrayAttribBinding(vertexArray, 1, 0);
 
         float fWorldX = 1000.4f;
         float fWorldY = 1000.39f;
@@ -100,7 +157,7 @@ public class Main {
             secondsTimer += deltaTime;
 
             if (secondsTimer >= 1.0f) {
-                String title = String.format("Compute - %s fps", fps);
+                String title = String.format("%s - %s fps", compute ? "Compute" : "Graphics", fps);
 
                 glfwSetWindowTitle(window, title);
 
@@ -128,37 +185,52 @@ public class Main {
             float fNearX2 = fWorldX + cos(fWorldA + fFovHalf) * fNear;
             float fNearY2 = fWorldY + sin(fWorldA + fFovHalf) * fNear;
 
-            fWorldX += cos(fWorldA) * 0.2f * deltaTime;
-            fWorldY += sin(fWorldA) * 0.2f * deltaTime;
-
             float[] near = {fNearX1, fNearY1, fNearX2, fNearY2};
             float[] far = {fFarX1, fFarY1, fFarX2, fFarY2};
 
-            GL46.glUseProgram(computeShader);
-            GL46.glBindImageTexture(
-                    0,
-                    framebuffer.getCollarAttachment().getHandle(),
-                    0,
-                    false,
-                    0,
-                    GL46.GL_WRITE_ONLY,
-                    GL46.GL_RGBA32F
-            );
+            fWorldX += cos(fWorldA) * 0.2f * deltaTime;
+            fWorldY += sin(fWorldA) * 0.2f * deltaTime;
 
-            GL46.glBindTextureUnit(1, sky.getHandle());
-            GL46.glBindTextureUnit(2, ground.getHandle());
+            if (compute) {
+                GL46.glUseProgram(computeShader);
+                GL46.glBindImageTexture(
+                        0,
+                        framebuffer.getCollarAttachment().getHandle(),
+                        0,
+                        false,
+                        0,
+                        GL46.GL_WRITE_ONLY,
+                        GL46.GL_RGBA32F
+                );
 
-            GL46.glUniform4fv(0, near);
-            GL46.glUniform4fv(1, far);
+                GL46.glBindTextureUnit(1, sky.getHandle());
+                GL46.glBindTextureUnit(2, ground.getHandle());
 
-            int workGroupSizeX = 16;
-            int workGroupSizeY = 16;
+                GL46.glUniform4fv(0, near);
+                GL46.glUniform4fv(1, far);
 
-            int numGroupsX = (width[0] + workGroupSizeX - 1) / workGroupSizeX;
-            int numGroupsY = (height[0] + workGroupSizeY - 1) / workGroupSizeY;
+                int workGroupSizeX = 16;
+                int workGroupSizeY = 16;
 
-            GL46.glDispatchCompute(numGroupsX, numGroupsY, 1);
-            GL46.glMemoryBarrier(GL46.GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+                int numGroupsX = (width[0] + workGroupSizeX - 1) / workGroupSizeX;
+                int numGroupsY = (height[0] + workGroupSizeY - 1) / workGroupSizeY;
+
+                GL46.glDispatchCompute(numGroupsX, numGroupsY, 1);
+                GL46.glMemoryBarrier(GL46.GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+            } else {
+                GL46.glBindFramebuffer(GL46.GL_FRAMEBUFFER, framebuffer.getHandle());
+                GL46.glUseProgram(graphicsShader);
+
+                GL46.glBindVertexArray(vertexArray);
+
+                if (triangle) {
+                    GL46.glDrawArrays(GL46.GL_TRIANGLES, 0, 3);
+                } else {
+                    GL46.glDrawElements(GL46.GL_TRIANGLE_STRIP, 4, GL46.GL_UNSIGNED_INT, NULL);
+                }
+
+                GL46.glBindFramebuffer(GL46.GL_FRAMEBUFFER, 0);
+            }
 
             Renderer.blitFramebufferToSwapchain(framebuffer);
 
