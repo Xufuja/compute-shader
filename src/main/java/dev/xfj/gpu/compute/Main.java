@@ -18,12 +18,13 @@ import static org.lwjgl.glfw.GLFW.*;
 import static org.lwjgl.system.MemoryUtil.NULL;
 
 public class Main {
+    private static final Path COMPUTE_SHADER_PATH = Path.of("shaders/compute.glsl");
+    private static final Path VERTEX_SHADER_PATH = Path.of("shaders/vertex.glsl");
+    private static final Path FRAGMENT_SHADER_PATH = Path.of("shaders/fragment.glsl");
+
     private static boolean compute = false;
     private static int computeShader = -1;
     private static int graphicsShader = -1;
-    private static Path computeShaderPath = Path.of("shaders/compute.glsl");
-    private static Path vertexShaderPath = Path.of("shaders/vertex.glsl");
-    private static Path fragmentShaderPath = Path.of("shaders/fragment.glsl");
 
     public static void main(String[] args) {
         glfwSetErrorCallback(new GLFWErrorCallback() {
@@ -61,8 +62,12 @@ public class Main {
                     }
                     case GLFW_RELEASE -> {
                         if (key == GLFW_KEY_R) {
-                            computeShader = Shader.reloadComputeShader(computeShader, computeShaderPath);
-                            graphicsShader = Shader.reloadGraphicsShader(graphicsShader, vertexShaderPath, fragmentShaderPath);
+                            computeShader = Shader.reloadComputeShader(computeShader, COMPUTE_SHADER_PATH);
+                            graphicsShader = Shader.reloadGraphicsShader(
+                                    graphicsShader,
+                                    VERTEX_SHADER_PATH,
+                                    FRAGMENT_SHADER_PATH
+                            );
                         }
 
                         if (key == GLFW_KEY_S) {
@@ -77,13 +82,13 @@ public class Main {
         GL.createCapabilities();
         glfwSwapInterval(1);
 
-        computeShader = Shader.createComputeShader(computeShaderPath);
+        computeShader = Shader.createComputeShader(COMPUTE_SHADER_PATH);
 
         if (computeShader == -1) {
             throw new RuntimeException("Compute shader failed!");
         }
 
-        graphicsShader = Shader.createGraphicsShaders(vertexShaderPath, fragmentShaderPath);
+        graphicsShader = Shader.createGraphicsShaders(VERTEX_SHADER_PATH, FRAGMENT_SHADER_PATH);
 
         if (graphicsShader == -1) {
             throw new RuntimeException("Graphics shader failed!");
@@ -131,8 +136,22 @@ public class Main {
         GL46.glEnableVertexArrayAttrib(vertexArray, 0);
         GL46.glEnableVertexArrayAttrib(vertexArray, 1);
 
-        GL46.glVertexArrayAttribFormat(vertexArray, 0, 2, GL46.GL_FLOAT, false, 0);
-        GL46.glVertexArrayAttribFormat(vertexArray, 1, 2, GL46.GL_FLOAT, false, Float.BYTES * 2);
+        GL46.glVertexArrayAttribFormat(
+                vertexArray,
+                0,
+                2,
+                GL46.GL_FLOAT,
+                false,
+                0
+        );
+        GL46.glVertexArrayAttribFormat(
+                vertexArray,
+                1,
+                2,
+                GL46.GL_FLOAT,
+                false,
+                Float.BYTES * 2
+        );
 
         GL46.glVertexArrayAttribBinding(vertexArray, 0, 0);
         GL46.glVertexArrayAttribBinding(vertexArray, 1, 0);
@@ -220,6 +239,12 @@ public class Main {
             } else {
                 GL46.glBindFramebuffer(GL46.GL_FRAMEBUFFER, framebuffer.getHandle());
                 GL46.glUseProgram(graphicsShader);
+
+                GL46.glBindTextureUnit(1, sky.getHandle());
+                GL46.glBindTextureUnit(2, ground.getHandle());
+
+                GL46.glUniform4fv(0, near);
+                GL46.glUniform4fv(1, far);
 
                 GL46.glBindVertexArray(vertexArray);
 
