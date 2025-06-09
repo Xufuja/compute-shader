@@ -80,7 +80,7 @@ public class Main {
 
         glfwMakeContextCurrent(window);
         GL.createCapabilities();
-        glfwSwapInterval(1);
+        glfwSwapInterval(0);
 
         computeShader = Shader.createComputeShader(COMPUTE_SHADER_PATH);
 
